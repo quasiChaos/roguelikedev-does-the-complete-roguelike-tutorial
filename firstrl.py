@@ -107,13 +107,19 @@ class Object:
         dy = other.y - self.y
         return math.sqrt(dx ** 2 + dy ** 2)
 
+    def send_to_back(self):
+        global objects
+        objects.remove(self)
+        objects.insert(0, self)
+
 
 
 class Fighter:
     # Combat-related properties and methods
-    def __init__(self, hp, defense, power):
+    def __init__(self, hp, defense, power, death_function=None):
         self.max_hp = hp
         self.hp =hp
+        self.death_function = death_function
         self.defense = defense
         self.power = power
 
@@ -121,6 +127,10 @@ class Fighter:
         # apply damage if possible
         if damage > 0:
             self.hp -= damage
+            if self.hp <= 0:
+                function = self.death_function
+                if function is not None:
+                    function(self.owner)
 
     def attack(self, target):
         # a simple formula for attack damage
@@ -259,14 +269,14 @@ def place_objects(room):
         if not is_blocked(x, y):
             if libtcod.random_get_int(0, 0, 100) < 80: # 80% chance
                 # Create an orc
-                fighter_component = Fighter(hp=10, defense=0, power=3)
+                fighter_component = Fighter(hp=10, defense=0, power=3, death_function=monster_death)
                 ai_component = BasicMonster()
 
                 monster = Object(x, y, 'o', 'orc', libtcod.desaturated_green,
                     blocks=True, fighter=fighter_component, ai=ai_component)
             else:
                 # Create a troll
-                fighter_component = Fighter(hp=16, defense=1, power=4)
+                fighter_component = Fighter(hp=16, defense=1, power=4, death_function=monster_death)
                 ai_component = BasicMonster()
 
                 monster = Object(x, y, 'T', 'troll', libtcod.darker_green,
@@ -309,7 +319,9 @@ def render_all():
 
     # Draw all objects in the list
     for object in objects:
-        object.draw()
+        if object != player:
+            object.draw()
+    player.draw()
 
     libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 
@@ -327,7 +339,7 @@ def player_move_or_attack(dx, dy):
     # Try to find an attackable object there
     target = None
     for object in objects:
-        if object.x == x and object.y == y:
+        if object.fighter and object.x == x and object.y == y:
             target = object
             break
 
@@ -365,6 +377,26 @@ def handle_keys():
         else:
             return 'didnt-take-turn'
 
+def player_death(player):
+    # Game Over, man!
+    global game_state
+    print 'You died.'
+    game_state = 'dead'
+
+    player.char = '%'
+    player.color = libtcod.dark_red
+
+def monster_death(monster):
+    print monster.name.capitalize() + ' is dead!'
+    monster.char = '%'
+    monster.color = libtcod.dark_amber
+    monster.blocks = False
+    monster.fighter = None
+    monster.ai = None
+    monster.name = 'Remains of ' + monster.name
+    monster.send_to_back()
+
+
 
 #################
 # GAME INIT
@@ -375,7 +407,7 @@ libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial'
 con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
 
 # Create object representing the player
-fighter_component = Fighter(hp=30, defense=2, power=5)
+fighter_component = Fighter(hp=30, defense=2, power=5, death_function=player_death)
 player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
 
 # The list of objects starting with the player
